@@ -1,10 +1,8 @@
 ### WIP WIP WIP :)
-
-from nltk.sentiment import SentimentIntensityAnalyzer
-from transformers import AutoTokenizer, RobertaForSequenceClassification
-from scipy.special import softmax
+from transformers import AutoTokenizer, RobertaForSequenceClassification, Trainer, TrainingArguments
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -69,3 +67,72 @@ test_dataset = SpamClassificationDataset(test_text, test_labels, tokenizer)
 model = RobertaForSequenceClassification.from_pretrained('roberta-base', num_labels=2)
 
 # now just need to research training a pytorch model and train the spam classifier :)
+def compute_metrics(pred):
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
+    acc = accuracy_score(labels, preds)
+    return {
+        'accuracy': acc,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
+
+training_args = TrainingArguments(
+    output_dir='./results',
+    num_train_epochs=3,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=8,
+    warmup_steps=10,
+    weight_decay=0.01,
+    logging_dir='./logs',
+    logging_steps=10,
+    fp16=True,  # enable mixed precision training
+    evaluation_strategy='epoch',  # evaluate after each epoch
+    save_strategy='epoch',  # save once per epoch
+    learning_rate=5e-5,  # default learning rate for RoBERTa
+    load_best_model_at_end=True,  # load the best model at the end of training
+    metric_for_best_model='accuracy',
+    greater_is_better=True
+)
+
+# create and train the model on the GPU
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    eval_dataset=test_dataset,
+    compute_metrics=compute_metrics
+)
+
+trainer.train()
+
+def predict_message(pred_text):
+    # encode the message
+    encoded_msg = tokenizer.encode_plus(
+        pred_text,
+        add_special_tokens=True,
+        max_length=100,
+        padding='max_length',
+        truncation=True,
+        return_token_type_ids=False,
+        return_attention_mask=True,
+        return_tensors='pt'
+    )
+
+    # move the input tensor onto the GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    encoded_msg = {k: v.to(device) for k, v in encoded_msg.items()}
+
+    # make the prediction
+    with torch.no_grad():
+        prediction = model(encoded_msg['input_ids'], encoded_msg['attention_mask'])
+        label = prediction.logits.argmax().item()
+    if label == 1:
+        output = [label, 'spam']
+    else:
+        output = [label, 'ham']
+    return output
+
+predict_message('our new mobile video service is live. just install on your phone to start watching.')
