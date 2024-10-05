@@ -55,7 +55,7 @@ class SpamClassificationDataset(Dataset):
         label = torch.tensor(label)
 
         return{
-            'input_ids': input_ids.cpu(), # haven't worked with gpu, need to research
+            'input_ids': input_ids.cpu(), # .cpu() returns to cpu
             'attention_mask': attention_mask.cpu(),
             'labels': label.cpu()
         }
