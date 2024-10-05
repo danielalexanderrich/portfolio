@@ -136,3 +136,5 @@ def predict_message(pred_text):
     return output
 
 predict_message('our new mobile video service is live. just install on your phone to start watching.')
+
+# want to compare to autotokenizer vs robertatokenizer
